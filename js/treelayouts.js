@@ -334,8 +334,42 @@ TransmissionTreeLayout.prototype.positionInternals = function (node) {
     return xpos;
 };
 
+// Reorder children so that zero-length edges branch upwards, while the
+// remaining child keeps children[0] and therefore continues the parent's line.
+TransmissionTreeLayout.prototype.orientZeroLengthEdges = function () {
+
+    function orient(node) {
+        if (node.children.length > 1) {
+            var nonZero = [];
+            var zero = [];
+
+            for (var i=0; i<node.children.length; i++) {
+                var child = node.children[i];
+                if (child.branchLength === 0)
+                    zero.push(child);
+                else
+                    nonZero.push(child);
+            }
+
+            // Only reorder when there is something to continue the line
+            if (zero.length > 0 && nonZero.length > 0)
+                node.children = nonZero.concat(zero);
+        }
+
+        for (var j=0; j<node.children.length; j++)
+            orient(node.children[j]);
+    }
+
+    orient(this.tree.root);
+
+    // Clear out-of-date leaf list (same as Tree.prototype.sortNodes)
+    this.tree.leafList = undefined;
+};
+
 // Disable sorting for transmission trees
-TransmissionTreeLayout.prototype.sortTree = function() { };
+TransmissionTreeLayout.prototype.sortTree = function() {
+    this.orientZeroLengthEdges();
+};
 
 
 // Produce a rectangular cladogram layout
