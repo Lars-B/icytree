@@ -139,7 +139,7 @@ TreeLayout.prototype.groupLeaves = function() {
 
             if (!this.tree.isRecombDestNode(descendent))
                 continue;
-            
+
             var recombID = descendent.hybridID;
             var recombSrc = this.tree.getRecombEdgeMap()[recombID][0];
             var recombDest = descendent;
@@ -191,7 +191,7 @@ TreeLayout.prototype.getNLeafDescendents = function(descendents) {
 
 function StandardTreeLayout(tree) {
     TreeLayout.call(this, tree);
-    
+
     this.nodePositions = {};
 
     // Position leaves
@@ -366,9 +366,72 @@ TransmissionTreeLayout.prototype.orientZeroLengthEdges = function () {
     this.tree.leafList = undefined;
 };
 
+TransmissionTreeLayout.orientationStrategies = [
+    { line: "down",     branch: "up" },
+    { line: "left",     branch: "right" },
+    { line: "ancestor", branch: "descendant" }
+    // These are the hard coded orientations
+];
+
+// Reorder children according to their "orientation" annotation.
+// Nodes whose children carry no recognised orientation are left untouched.
+TransmissionTreeLayout.prototype.orientByAttribute = function () {
+    var ranks = {};
+    var strategies = TransmissionTreeLayout.orientationStrategies;
+    for (var s=0; s<strategies.length; s++) {
+        ranks[strategies[s].line.toLowerCase()] = -1;   // continue the parent's line
+        ranks[strategies[s].branch.toLowerCase()] = 1;  // branch upwards
+    }
+
+    function getRank(node) {
+        if (node.annotation === undefined || node.annotation.orientation === undefined)
+            return undefined;
+
+        var value = String(node.annotation.orientation).toLowerCase();
+        return ranks.hasOwnProperty(value) ? ranks[value] : undefined;
+    }
+
+    function orient(node) {
+        if (node.children.length > 1) {
+            var entries = [];
+            var anyRecognised = false;
+
+            for (var i=0; i<node.children.length; i++) {
+                var rank = getRank(node.children[i]);
+                if (rank !== undefined)
+                    anyRecognised = true;
+
+                entries.push({
+                    node: node.children[i],
+                    rank: (rank === undefined) ? 0 : rank,
+                    index: i
+                });
+            }
+
+            if (anyRecognised) {
+                // Stable sort: ties keep their current order
+                entries.sort(function (a, b) {
+                    return (a.rank - b.rank) || (a.index - b.index);
+                });
+
+                node.children = entries.map(function (e) { return e.node; });
+            }
+        }
+
+        for (var j=0; j<node.children.length; j++)
+            orient(node.children[j]);
+    }
+
+    orient(this.tree.root);
+
+    // Clear out-of-date leaf list
+    this.tree.leafList = undefined;
+};
+
 // Disable sorting for transmission trees
 TransmissionTreeLayout.prototype.sortTree = function() {
     this.orientZeroLengthEdges();
+    this.orientByAttribute();
 };
 
 
